@@ -8,3 +8,11 @@ You can install directly from GitHub:
 
 ```bash
 pip install git+https://github.com/serkanshentyurk/Shentyurk_utils.git
+
+```
+
+If you install the package before and want to reinstall the updated version:
+
+```bash
+pip install --force-reinstall git+https://github.com/serkanshentyurk/Shentyurk_utils.git
+```
