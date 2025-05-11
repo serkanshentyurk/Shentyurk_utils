@@ -1,7 +1,48 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 
+def inspect_session_lengths(data: pd.DataFrame, animal_id_col: str = 'Participant_ID', session_col: str = 'savetime', violin_plot: bool = False, figsize: tuple = (10, 5)):
+	"""
+	Inspect the distribution of session lengths for each participant.
+	Args:
+		data (pd.DataFrame): DataFrame containing the session data with 'Participant_ID' and 'savetime' columns.
+	"""
+	# Calculate session lengths: number of trials per session for each participant.
+	# A session is defined by a unique ('Participant_ID', 'savetime') pair.
+	# .size() counts the number of rows (trials) in each group.
+	# .reset_index(name='trials_per_session') converts the resulting Series to a DataFrame.
+	session_lengths_df = data.groupby([animal_id_col, session_col]).size().reset_index(name='trials_per_session')
+
+	# Create the figure for the plot.
+	# Using figsize similar to other plots in the notebook.
+	plt.figure(figsize=figsize)
+
+	# Generate the boxplot.
+	# x-axis: 'Participant_ID'
+	# y-axis: 'trials_per_session' (the calculated session lengths)
+	# data: the DataFrame containing this information
+	if violin_plot:
+		sns.violinplot(x=animal_id_col, y='trials_per_session', data=session_lengths_df)
+	else:
+		# Use boxplot for better visualization of the distribution.
+		# Boxplot is more robust to outliers and provides a clear summary of the data.
+		# It shows the median, quartiles, and potential outliers.
+		# sns.boxplot(x=animal_id_col, y='trials_per_session', data=session_lengths_df)
+		# Use violin plot for a more detailed view of the distribution.
+		# sns.violinplot(x=animal_id_col, y='trials_per_session', data=session_lengths_df)
+		sns.boxplot(x=animal_id_col, y='trials_per_session', data=session_lengths_df)
+
+	# Customize the plot for better readability.
+	plt.xlabel(animal_id_col)
+	plt.ylabel('Number of Trials per Session')
+	plt.title('Distribution of Session Lengths per Participant')
+	plt.xticks(rotation=45, ha='right')  # Rotate x-axis labels to prevent overlap.
+	plt.grid(True)  # Add a grid for easier value reading.
+	plt.tight_layout()  # Adjust layout to make sure everything fits.
+	plt.show()
+ 
 
 def update_features(data_raw, features, verbose = True):
 	"""
@@ -297,20 +338,53 @@ def pick_trials_inspect(input_data, trial_length_threshold = 50, verbose = True,
 		plt.tight_layout()
 		plt.show()
 
-def pick_trials(input_data, output_data, n_trials_to_keep = 150, test_ratio = 0.2, random_indices = True):
+def pick_trials(input_data, output_data, n_trials_to_keep = None, fraction_to_keep = None, test_ratio = 0.2, random_indices = True):
 	"""
-	Function to prepare data by truncating sessions to a specified number of trials.
+	Pick trials from the input data and output data. It first checks if the number of trials to keep is provided. 
+	If not, it calculates the number of trials to keep based on the fraction to keep. 
+	It then processes the data for each animal, ensuring that the input and output data are in the correct format and split into training and testing sets. 
+	
 	Args:
 		input_data (list): List of input data arrays for each animal.
 		output_data (list): List of output data arrays for each animal.
-		trials_to_keep (int): Number of trials to keep in each session.
+		n_trials_to_keep (int): Number of trials to keep in each session.
+		fraction_to_keep (float): Fraction of trials to keep in each session.
+		test_ratio (float): Ratio of trials to use for testing.
+		random_indices (bool): Whether to shuffle the trials randomly.
 	Returns:
-		processed_input_data (list): List of processed input data arrays.
-		processed_output_data (list): List of processed output data arrays.
+		processed_input_data_train (list): List of processed input data for training.
+		processed_output_data_train (list): List of processed output data for training.
+		processed_input_data_test (list): List of processed input data for testing.
+		processed_output_data_test (list): List of processed output data for testing.
 	"""
+	if fraction_to_keep is None and n_trials_to_keep is None:
+		raise ValueError("Either n_trials_to_keep or fraction_to_keep must be provided.")
+	if n_trials_to_keep is not None:
+		if isinstance(n_trials_to_keep, (int, float)):
+			n_trials_to_keep = [n_trials_to_keep] * len(input_data)
+		elif len(n_trials_to_keep) == 1:
+			n_trials_to_keep = [n_trials_to_keep[0]] * len(input_data)
+		elif len(n_trials_to_keep) != len(input_data):
+			raise ValueError("n_trials_to_keep must be a single value or a list with the same length as input_data.")
+	else:
+		raise NotImplementedError("Fraction to keep is not implemented yet.")
+
+	# if fraction_to_keep is not None:
+	# 	if isinstance(fraction_to_keep, (int, float)):
+	# 		if fraction_to_keep < 0 or fraction_to_keep > 1:
+	# 			raise ValueError("fraction_to_keep must be between 0 and 1.")
+	# 		fraction_to_keep = [fraction_to_keep] * len(input_data)
+	# 	elif len(fraction_to_keep) == 1:
+	# 		fraction_to_keep = [fraction_to_keep[0]] * len(input_data)
+	# 	elif len(fraction_to_keep) != len(input_data):
+	# 		raise ValueError("fraction_to_keep must be a single value or a list with the same length as input_data.")
 
 	processed_input_data = []
 	processed_output_data = []
+	processed_input_data_train = []
+	processed_output_data_train = []
+	processed_input_data_test = []
+	processed_output_data_test = []
 
 	# Iterate through each animal
 	for animal_idx in range(len(input_data)):
@@ -320,16 +394,23 @@ def pick_trials(input_data, output_data, n_trials_to_keep = 150, test_ratio = 0.
 		valid_input_sessions_for_animal = []
 		valid_output_sessions_for_animal = []
 
+		if n_trials_to_keep is not None:
+			pass
+		else:
+			pass
+			# frequency_to_keep related things
+		n_trials_to_keep_session = n_trials_to_keep[animal_idx]
+
 		# Iterate through sessions for the current animal
 		for session_idx in range(len(animal_input_sessions)):
 			input_session = animal_input_sessions[session_idx]
 			output_session = animal_output_sessions[session_idx]
 
 			# Check if the session has enough trials
-			if input_session.shape[0] >= n_trials_to_keep:
+			if input_session.shape[0] >= n_trials_to_keep_session:
 				# Truncate to keep only the first 'trials_to_keep' trials
-				input_session_truncated = input_session[:n_trials_to_keep, :]
-				output_session_truncated = output_session[:n_trials_to_keep, :]
+				input_session_truncated = input_session[:n_trials_to_keep_session, :]
+				output_session_truncated = output_session[:n_trials_to_keep_session, :]
 
 				valid_input_sessions_for_animal.append(input_session_truncated)
 				valid_output_sessions_for_animal.append(output_session_truncated)
@@ -345,27 +426,36 @@ def pick_trials(input_data, output_data, n_trials_to_keep = 150, test_ratio = 0.
 
 			animal_input_3d = np.transpose(animal_input_3d, (1, 0, 2)) # Shape: (trials_to_keep, num_sessions, num_features)
 			animal_output_3d = np.transpose(animal_output_3d, (1, 0, 2)) # Shape: (trials_to_keep, num_sessions, num_features)
-			processed_input_data.append(animal_input_3d)
-			processed_output_data.append(animal_output_3d)
-			# print(f"Animal {animal_idx}: Processed {animal_input_3d.shape[0]} sessions. Input shape: {animal_input_3d.shape}, Output shape: {animal_output_3d.shape}")
+
+			# Split the data into training and testing sets
+			trial_indices = np.arange(animal_input_3d.shape[0])
+   
+			# Shuffle the indices if random_indices is True
+			if random_indices:
+				np.random.seed(42)
+				np.random.shuffle(trial_indices)
+
+			# Training and test dataset indices
+			train_indices = trial_indices[:int(len(trial_indices) * (1 - test_ratio))]
+			test_indices = trial_indices[int(len(trial_indices) * (1 - test_ratio)):]
+   
+			# Training data
+			animal_input_3d_train = animal_input_3d[train_indices]
+			animal_output_3d_train = animal_output_3d[train_indices]
+			# Test data
+			animal_input_3d_test = animal_input_3d[test_indices]
+			animal_output_3d_test = animal_output_3d[test_indices]
+   
+			# Append the processed data for this animal
+			processed_input_data_train.append(animal_input_3d_train)
+			processed_output_data_train.append(animal_output_3d_train)
+			processed_input_data_test.append(animal_input_3d_test)
+			processed_output_data_test.append(animal_output_3d_test)   
+   
 		else:
 			# Handle cases where an animal has no sessions meeting the criteria
 			processed_input_data.append(None) # Or np.empty((0, trials_to_keep, num_input_features))
 			processed_output_data.append(None) # Or np.empty((0, trials_to_keep, num_output_features))
-			print(f"Animal {animal_idx}: No sessions met the {n_trials_to_keep} trial threshold.")
+			print(f"Animal {animal_idx}: No sessions met the trial threshold.")
 
-	all_indices = np.arange(n_trials_to_keep)
-	if random_indices:
-		np.random.seed(42)
-		np.random.shuffle(all_indices)
-  
-	# Split the data into training and test sets
-	n_test = int(n_trials_to_keep * test_ratio)
-	train_indices = all_indices[:-n_test]
-	test_indices = all_indices[-n_test:]
-	processed_input_data_train = [processed_input_data[i][train_indices] for i in range(len(processed_input_data))]
-	processed_output_data_train = [processed_output_data[i][train_indices] for i in range(len(processed_output_data))]
-	processed_input_data_test = [processed_input_data[i][test_indices] for i in range(len(processed_input_data))]
-	processed_output_data_test = [processed_output_data[i][test_indices] for i in range(len(processed_output_data))]
-	
 	return processed_input_data_train, processed_output_data_train, processed_input_data_test, processed_output_data_test
