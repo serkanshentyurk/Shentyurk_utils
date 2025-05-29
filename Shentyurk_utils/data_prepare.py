@@ -139,6 +139,7 @@ def format_data(data, features, id_col = 'Participant_ID', exp_date_col = 'savet
 	Returns:
 		input_data_all (list): List of input data arrays for each animal.
 		output_data_all (list): List of output data arrays for each animal.
+		animal_ids (list): List of animal IDs 
 	"""
     
 	# Ensure the id_col and exp_date_col are present in the DataFrame
@@ -188,7 +189,7 @@ def format_data(data, features, id_col = 'Participant_ID', exp_date_col = 'savet
 		# Append the animal data to the overall list
 		input_data_all.append(animal_input_formatted)
 		output_data_all.append(animal_output_formatted)
-	return input_data_all, output_data_all
+	return input_data_all, output_data_all, animal_ids
 
 
 def create_k_fold_indices(n_trials_per_session, k_folds = 5, random_indices = True, verbose = True):
