@@ -459,4 +459,6 @@ def pick_trials(input_data, output_data, n_trials_to_keep = None, fraction_to_ke
 			processed_output_data.append(None) # Or np.empty((0, trials_to_keep, num_output_features))
 			print(f"Animal {animal_idx}: No sessions met the trial threshold.")
 
-	return processed_input_data_train, processed_output_data_train, processed_input_data_test, processed_output_data_test
+	processed_data = {'train': {'input': processed_input_data_train, 'output': processed_output_data_train},
+					  'test': {'input': processed_input_data_test, 'output': processed_output_data_test}}
+	return processed_data
