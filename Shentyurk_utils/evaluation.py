@@ -1,7 +1,53 @@
 import jax
 import numpy as np
+from scipy import stats
+from typing import Optional, Literal, Tuple
 
-def compute_probability_from_logit(model_outputs, log_probability=True):
+def apply_paired_t_test(group_1: np.ndarray, 
+                        group_2: np.ndarray, 
+                        side: Optional[Literal['two_sided', 'greater', 'lesser']] = 'two_sided', 
+                        verbose: bool = True
+                        ) -> Tuple[Optional[float], Optional[float]]:
+	'''
+	Apply a paired t-test to two groups of likelihoods.
+	Args:
+		group_1 (array-like): Likelihoods for group 1.
+		group_2 (array-like): Likelihoods for group 2.
+		side (str, optional): Type of t-test ('two_sided', 'greater', 'lesser'). Defaults to 'two_sided'.
+		verbose (bool, optional): If True, prints the results. Defaults to True.
+	Returns:
+		t_statistic (float): The t-statistic from the paired t-test.
+		p_value (float): The p-value from the paired t-test.
+	'''
+	if side not in ['two_sided', 'greater', 'lesser']:
+		raise ValueError("Invalid value for 'side'. Choose from 'two_sided', 'greater', or 'lesser'.")
+	valid_indices = ~np.isnan(group_1) & ~np.isnan(group_2)
+	l1_paired_clean = np.array(group_1)[valid_indices]
+	l2_paired_clean = np.array(group_2)[valid_indices]
+
+	if len(l1_paired_clean) > 1 and len(l2_paired_clean) > 1 and len(l1_paired_clean) == len(l2_paired_clean):
+		t_statistic, p_value = stats.ttest_rel(l1_paired_clean, l2_paired_clean, alternative = side)
+		if verbose:
+			print(f"Paired t-test between Group 1 and Group 2 likelihoods:")
+			print(f"T-statistic: {t_statistic:.4f}")
+			print(f"P-value: {p_value:.4f}")
+
+		if p_value < 0.05:
+			if verbose:
+				print("The difference between Group 1 and Group 2 likelihoods is statistically significant.")
+		else:
+			if verbose:
+				print("The difference between Group 1 and Group 2 likelihoods is not statistically significant.")
+	else:
+		if verbose:
+			print("Not enough data points or unequal sample sizes after NaN removal for a paired t-test.")
+		return None, None
+	return t_statistic, p_value
+
+
+def compute_probability_from_logit(model_outputs: np.ndarray, 
+								   log_probability: bool = True
+								   ) -> np.ndarray:
 	"""
 	Function to compute probabilities from logits.
 	Args:
@@ -16,7 +62,9 @@ def compute_probability_from_logit(model_outputs, log_probability=True):
 		probabilities = np.array(jax.nn.softmax(model_outputs))
 	return probabilities
 
-def compute_normalized_log_likelihood(model_outputs, actual_choices):
+def compute_normalized_log_likelihood(model_outputs: np.ndarray, 
+									  actual_choices: np.ndarray
+									  ) -> float:
 	"""
 	Function to compute the normalized log likelihood of model outputs given actual choices.
 	Args:
@@ -44,12 +92,14 @@ def compute_normalized_log_likelihood(model_outputs, actual_choices):
 			actual_choice = int(actual_choices[trial_i, sess_i][0])
 			if actual_choice >= 0:  # values < 0 are invalid trials which we ignore.
 				log_likelihood += predicted_log_choice_probabilities[trial_i, sess_i, actual_choice]
-			n += 1
+				n += 1
 
-		normalized_likelihood = np.exp(log_likelihood / n)
-		return normalized_likelihood
+	normalized_likelihood = np.exp(log_likelihood / n)
+	return normalized_likelihood
 
-def compute_mse(model_outputs, actual_choices):
+def compute_mse(model_outputs: np.ndarray, 
+				actual_choices: np.ndarray
+				) -> float:
 	"""
 	Function to compute the mean squared error (MSE) between model outputs and actual choices.
 	Args:
@@ -67,7 +117,11 @@ def compute_mse(model_outputs, actual_choices):
 	return mse	
 
 
-def evaluate_model_performance(model_outputs, actual_choices, y_type = 'categorical', verbose = False):
+def evaluate_model_performance(model_outputs: np.ndarray, 
+							   actual_choices: np.ndarray, 
+							   y_type: Literal['categorical', 'scalar', 'continous', 'mixed'] = 'categorical', 
+							   verbose: bool = False
+							   ) -> dict:
 	"""
 	Function to evaluate the performance of a model based on its outputs and actual choices.
 	Args:
@@ -85,7 +139,7 @@ def evaluate_model_performance(model_outputs, actual_choices, y_type = 'categori
 		if verbose:
 			print(f'Normalized Log Likelihood: {100 * performance_categorical:.1f}%')
    
-	elif y_type == 'continuous':
+	elif y_type in ['scalar', 'continuous']:
 		# Compute the mean squared error
 		performance_continuous = compute_mse(model_outputs, actual_choices)
 		performance = {'mse': performance_continuous}
