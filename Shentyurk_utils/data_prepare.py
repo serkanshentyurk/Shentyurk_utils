@@ -204,7 +204,7 @@ def format_data(
 				session_output = session_data[output_features].values
 				if distribution_col is not None:
 					session_distribution = session_data[distribution_col].values
-					animal_distribution_formatted.append(session_distribution)
+					animal_distribution_formatted.append(session_distribution.reshape(-1,1))
 			except KeyError as e:
 				print(f"Warning: Skipping animal {animal_id}, session {session_id} due to missing feature column: {e}")
 				continue # Skip this session
