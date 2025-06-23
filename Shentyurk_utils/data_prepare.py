@@ -3,7 +3,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-def inspect_session_lengths(data: pd.DataFrame, animal_id_col: str = 'Participant_ID', session_col: str = 'savetime', violin_plot: bool = False, figsize: tuple = (10, 5)):
+from typing import Optional
+
+def inspect_session_lengths(
+    data: pd.DataFrame, 
+    animal_id_col: str = 'Participant_ID', 
+    session_col: str = 'savetime', 
+    violin_plot: bool = False, 
+    figsize: tuple = (10, 5)
+    ):
 	"""
 	Inspect the distribution of session lengths for each participant.
 	Args:
@@ -44,7 +52,11 @@ def inspect_session_lengths(data: pd.DataFrame, animal_id_col: str = 'Participan
 	plt.show()
  
 
-def update_features(data_raw, features, verbose = True):
+def update_features(
+    data_raw: pd.DataFrame, 
+    features: dict, 
+    verbose: bool = True
+	) -> tuple:
 	"""
 	Function to update features in a DataFrame by mapping non-numeric features to numeric values.
 	Args:
@@ -77,7 +89,7 @@ def update_features(data_raw, features, verbose = True):
 	if data_raw[features['input'] + features['output']].isnull().values.any():
 		raise ValueError("DataFrame contains NaN values in the specified features.")
 	# Ensure the DataFrame does not contain any infinite values in the specified features
-	if np.isinf(data_raw[features['input'] + features['output']]).values.any():
+	if np.isinf(data_raw[features['input'] + features['output']]).values.any(): # type: ignore
 		raise ValueError("DataFrame contains infinite values in the specified features.")
 
 	# Dictionary to store mappings for non-numeric features
@@ -122,7 +134,13 @@ def update_features(data_raw, features, verbose = True):
 	
 	return data, feature_mappings
 
-def format_data(data, features, id_col = 'Participant_ID', exp_date_col = 'savetime'):
+def format_data(
+    data: pd.DataFrame, 
+    features: dict, 
+    id_col: str = 'Participant_ID', 
+    exp_date_col: str = 'savetime',
+    distribution_col: Optional[str] = None
+    ) -> tuple:
 	"""
 	Function to format data into input and output arrays for each animal. 
 	The output structure is a list of lists. Each inner list contains the data for a specific animal,
@@ -136,15 +154,19 @@ def format_data(data, features, id_col = 'Participant_ID', exp_date_col = 'savet
 			- 'output': List of output feature names.
 		id_col (str): Column name for animal IDs.
 		exp_date_col (str): Column name for experiment date.
+		distribution_col (Optional[str]): Column name for distribution information (if applicable).
 	Returns:
 		input_data_all (list): List of input data arrays for each animal.
 		output_data_all (list): List of output data arrays for each animal.
 		animal_ids (list): List of animal IDs 
 	"""
-    
-	# Ensure the id_col and exp_date_col are present in the DataFrame
+    # Ensure the id_col and exp_date_col are present in the DataFrame
 	if id_col not in data.columns or exp_date_col not in data.columns:
 		raise ValueError(f"Columns '{id_col}' and '{exp_date_col}' must be present in the DataFrame.")
+
+	# Ensure distribution_col is present if specified
+	if distribution_col is not None and distribution_col not in data.columns:
+		raise ValueError(f"Column '{distribution_col}' must be present in the DataFrame if specified.")
 
 	# Get unique animal IDs
 	animal_ids = data[id_col].unique()
@@ -160,12 +182,15 @@ def format_data(data, features, id_col = 'Participant_ID', exp_date_col = 'savet
 	input_data_all = []
 	# Array for output features
 	output_data_all = []
-
+	# Array for distribution
+	distribution_all = []
 	# Populate the arrays
 	for i, animal_id in enumerate(animal_ids):
 		# contains sessions for one animal
 		animal_input_formatted = []
 		animal_output_formatted = []
+		animal_distribution_formatted = []
+  
 		animal_data_loop = data[data[id_col] == animal_id]
 		session_ids_animal = animal_data_loop[exp_date_col].unique()
 		for j, session_id in enumerate(session_ids_animal):
@@ -177,6 +202,9 @@ def format_data(data, features, id_col = 'Participant_ID', exp_date_col = 'savet
 				# 2d numpy array of features trials x features
 				session_input = session_data[input_features].values
 				session_output = session_data[output_features].values
+				if distribution_col is not None:
+					session_distribution = session_data[distribution_col].values
+					animal_distribution_formatted.append(session_distribution)
 			except KeyError as e:
 				print(f"Warning: Skipping animal {animal_id}, session {session_id} due to missing feature column: {e}")
 				continue # Skip this session
@@ -185,14 +213,21 @@ def format_data(data, features, id_col = 'Participant_ID', exp_date_col = 'savet
 
 			animal_input_formatted.append(session_input)
 			animal_output_formatted.append(session_output)
-   
+
 		# Append the animal data to the overall list
 		input_data_all.append(animal_input_formatted)
 		output_data_all.append(animal_output_formatted)
-	return input_data_all, output_data_all, animal_ids
+		if distribution_col is not None:
+			distribution_all.append(animal_distribution_formatted)
+	return input_data_all, output_data_all, distribution_all, animal_ids
 
 
-def create_k_fold_indices(n_trials_per_session, k_folds = 5, random_indices = True, verbose = True):
+def create_k_fold_indices(
+    n_trials_per_session: int, 
+    k_folds: int = 5, 
+    random_indices: bool = True, 
+    verbose: bool = True
+    ) -> list:
 	"""
 	Function to create k-fold indices for cross-validation.
 	Args:
@@ -267,11 +302,16 @@ def create_k_fold_indices(n_trials_per_session, k_folds = 5, random_indices = Tr
   
 	return kfold_indices
 
-def split_data(data, fold_idx = -1, kfold_indices = None, test = False):
+def split_data(
+    data: Optional[np.ndarray], 
+    fold_idx: int = -1, 
+    kfold_indices: Optional[list] = None, 
+    test: bool = False
+	) -> tuple:
 	"""
 	Function to split data into training and validation sets based on k-fold indices.
 	Args:
-		data (np.ndarray): The input data to be split.
+		data (Optional[np.ndarray]): The input data to be split.
 		fold_idx (int): The index of the fold to use for validation.
 		kfold_indices (list): List of dictionaries containing training and validation indices for each fold.
 		test (bool): If True, return the entire data without splitting.
@@ -279,6 +319,8 @@ def split_data(data, fold_idx = -1, kfold_indices = None, test = False):
 		train_data (np.ndarray): The training data for the specified fold.
 		val_data (np.ndarray): The validation data for the specified fold.
 	"""
+	if data is None:
+		return None, None  # If no data is provided, return None for both train and validation data
 	if test:
 		return data, None
 	else:
@@ -328,8 +370,8 @@ def pick_trials_inspect(input_data, trial_length_threshold = 50, verbose = True,
 	if plot:
 		plt.figure(figsize=(10, 6))
 		plt.hist(freq_trials, cumulative=False, bins=20, color='lightblue', alpha=1)
-		plt.axvline(x=np.mean(freq_trials), color='red', linestyle='--', label='Mean')
-		plt.axvline(x=np.median(freq_trials), color='black', linestyle='--', label='Median')
+		plt.axvline(x=np.mean(freq_trials), color='red', linestyle='--', label='Mean') # type: ignore
+		plt.axvline(x=np.median(freq_trials), color='black', linestyle='--', label='Median') # type: ignore
 		plt.legend()
 		plt.grid()
 		plt.xticks(rotation=45)
@@ -339,7 +381,14 @@ def pick_trials_inspect(input_data, trial_length_threshold = 50, verbose = True,
 		plt.tight_layout()
 		plt.show()
 
-def pick_trials(input_data, output_data, n_trials_to_keep = None, fraction_to_keep = None, test_ratio = 0.2, random_indices = True):
+def pick_trials(
+    input_data: list, 
+    output_data: list, 
+    n_trials_to_keep: Optional[int] = None, 
+    fraction_to_keep: Optional[float] = None, 
+    test_ratio: float = 0.2, 
+    random_indices: bool = True, 
+    distribution_info: Optional[list] = None):
 	"""
 	Pick trials from the input data and output data. It first checks if the number of trials to keep is provided. 
 	If not, it calculates the number of trials to keep based on the fraction to keep. 
@@ -352,6 +401,7 @@ def pick_trials(input_data, output_data, n_trials_to_keep = None, fraction_to_ke
 		fraction_to_keep (float): Fraction of trials to keep in each session.
 		test_ratio (float): Ratio of trials to use for testing.
 		random_indices (bool): Whether to shuffle the trials randomly.
+		distribution_info (Optional[list]): List of distribution information for each animal, if applicable.
 	Returns:
 		processed_input_data_train (list): List of processed input data for training.
 		processed_output_data_train (list): List of processed output data for training.
@@ -362,7 +412,7 @@ def pick_trials(input_data, output_data, n_trials_to_keep = None, fraction_to_ke
 		raise ValueError("Either n_trials_to_keep or fraction_to_keep must be provided.")
 	if n_trials_to_keep is not None:
 		if isinstance(n_trials_to_keep, (int, float)):
-			n_trials_to_keep = [n_trials_to_keep] * len(input_data)
+			n_trials_to_keep = [n_trials_to_keep] * len(input_data) # type: ignore
 		elif len(n_trials_to_keep) == 1:
 			n_trials_to_keep = [n_trials_to_keep[0]] * len(input_data)
 		elif len(n_trials_to_keep) != len(input_data):
@@ -382,15 +432,23 @@ def pick_trials(input_data, output_data, n_trials_to_keep = None, fraction_to_ke
 
 	processed_input_data = []
 	processed_output_data = []
+ 
 	processed_input_data_train = []
 	processed_output_data_train = []
+ 
 	processed_input_data_test = []
 	processed_output_data_test = []
+ 
+	processed_distribution_train = []
+	processed_distribution_test = []
 
 	# Iterate through each animal
 	for animal_idx in range(len(input_data)):
 		animal_input_sessions = input_data[animal_idx]
 		animal_output_sessions = output_data[animal_idx]
+		if distribution_info is not None:
+			animal_distribution_sessions = distribution_info[animal_idx]
+			valid_dist = []
 
 		valid_input_sessions_for_animal = []
 		valid_output_sessions_for_animal = []
@@ -400,13 +458,14 @@ def pick_trials(input_data, output_data, n_trials_to_keep = None, fraction_to_ke
 		else:
 			pass
 			# frequency_to_keep related things
-		n_trials_to_keep_session = n_trials_to_keep[animal_idx]
+		n_trials_to_keep_session = n_trials_to_keep[animal_idx] # type: ignore
 
 		# Iterate through sessions for the current animal
 		for session_idx in range(len(animal_input_sessions)):
 			input_session = animal_input_sessions[session_idx]
 			output_session = animal_output_sessions[session_idx]
-
+			if distribution_info is not None:
+				distribution_session = animal_distribution_sessions[session_idx] # type: ignore
 			# Check if the session has enough trials
 			if input_session.shape[0] >= n_trials_to_keep_session:
 				# Truncate to keep only the first 'trials_to_keep' trials
@@ -415,11 +474,15 @@ def pick_trials(input_data, output_data, n_trials_to_keep = None, fraction_to_ke
 
 				valid_input_sessions_for_animal.append(input_session_truncated)
 				valid_output_sessions_for_animal.append(output_session_truncated)
+				if distribution_info is not None:
+					valid_dist.append(distribution_session[:n_trials_to_keep_session, :]) # type: ignore
 
 		# After checking all sessions, stack the valid ones into a 3D array for the animal
 		if valid_input_sessions_for_animal: # Check if any sessions were valid
 			animal_input_3d = np.stack(valid_input_sessions_for_animal, axis=0)
 			animal_output_3d = np.stack(valid_output_sessions_for_animal, axis=0)
+			if distribution_info is not None:
+				animal_distribution_3d = np.stack(valid_dist, axis=0) # type: ignore
 
 			# Ensure the dimensions are correct
 			if animal_input_3d.ndim != 3 or animal_output_3d.ndim != 3:
@@ -427,7 +490,9 @@ def pick_trials(input_data, output_data, n_trials_to_keep = None, fraction_to_ke
 
 			animal_input_3d = np.transpose(animal_input_3d, (1, 0, 2)) # Shape: (trials_to_keep, num_sessions, num_features)
 			animal_output_3d = np.transpose(animal_output_3d, (1, 0, 2)) # Shape: (trials_to_keep, num_sessions, num_features)
-
+			if distribution_info is not None:
+				animal_distribution_3d = np.transpose(animal_distribution_3d, (1, 0, 2)) # type: ignore
+    
 			# Split the data into training and testing sets
 			trial_indices = np.arange(animal_input_3d.shape[0])
    
@@ -446,19 +511,38 @@ def pick_trials(input_data, output_data, n_trials_to_keep = None, fraction_to_ke
 			# Test data
 			animal_input_3d_test = animal_input_3d[test_indices]
 			animal_output_3d_test = animal_output_3d[test_indices]
+
+			if distribution_info is not None:
+				animal_distribution_3d_train = animal_distribution_3d[train_indices] # type: ignore
+				animal_distribution_3d_test = animal_distribution_3d[test_indices] # type: ignore
    
 			# Append the processed data for this animal
 			processed_input_data_train.append(animal_input_3d_train)
 			processed_output_data_train.append(animal_output_3d_train)
 			processed_input_data_test.append(animal_input_3d_test)
-			processed_output_data_test.append(animal_output_3d_test)   
-   
+			processed_output_data_test.append(animal_output_3d_test)
+
+			if distribution_info is not None:
+				processed_distribution_train.append(animal_distribution_3d_train) # type: ignore	
+				processed_distribution_test.append(animal_distribution_3d_test) # type: ignore
+
 		else:
 			# Handle cases where an animal has no sessions meeting the criteria
 			processed_input_data.append(None) # Or np.empty((0, trials_to_keep, num_input_features))
 			processed_output_data.append(None) # Or np.empty((0, trials_to_keep, num_output_features))
+			if distribution_info is not None:
+				processed_distribution_train.append(None)
+				processed_distribution_test.append(None)
+	
 			print(f"Animal {animal_idx}: No sessions met the trial threshold.")
-
-	processed_data = {'train': {'input': processed_input_data_train, 'output': processed_output_data_train},
-					  'test': {'input': processed_input_data_test, 'output': processed_output_data_test}}
+	if distribution_info is None:
+		processed_distribution_train = None
+		processed_distribution_test = None
+  
+	processed_data = {'train': {'input': processed_input_data_train, 
+                             	'output': processed_output_data_train,
+                             	'distribution': processed_distribution_train},
+					  'test': {'input': processed_input_data_test, 
+                				'output': processed_output_data_test,
+                				'distribution': processed_distribution_test}}
 	return processed_data

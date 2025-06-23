@@ -9,10 +9,10 @@ def apply_paired_t_test(group_1: np.ndarray,
                         verbose: bool = True
                         ) -> Tuple[Optional[float], Optional[float]]:
 	'''
-	Apply a paired t-test to two groups of likelihoods.
+	Apply a paired t-test to two groups.
 	Args:
-		group_1 (array-like): Likelihoods for group 1.
-		group_2 (array-like): Likelihoods for group 2.
+		group_1 (array-like): Group 1 data
+		group_2 (array-like): Group 2 data
 		side (str, optional): Type of t-test ('two_sided', 'greater', 'lesser'). Defaults to 'two_sided'.
 		verbose (bool, optional): If True, prints the results. Defaults to True.
 	Returns:
@@ -93,7 +93,8 @@ def compute_normalized_log_likelihood(model_outputs: np.ndarray,
 			if actual_choice >= 0:  # values < 0 are invalid trials which we ignore.
 				log_likelihood += predicted_log_choice_probabilities[trial_i, sess_i, actual_choice]
 				n += 1
-
+	if n == 0:
+		raise ValueError("No valid trials found in actual_choices.")
 	normalized_likelihood = np.exp(log_likelihood / n)
 	return normalized_likelihood
 
